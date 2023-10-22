@@ -1,0 +1,29 @@
+# Default values for traefik-extend.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 9000
+  targetPort: traefik
+  name: traefik
+
+nameOverride: "traefik"
+
+ingress:
+  enabled: true
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: traefik.k8s.pghost.cn
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local

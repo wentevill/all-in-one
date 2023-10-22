@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "traefik-extend.fullname" . }}-test-connection"
+  labels:
+    {{- include "traefik-extend.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['{{ .Values.nameOverride }}:{{ .Values.service.port }}']
+  restartPolicy: Never
