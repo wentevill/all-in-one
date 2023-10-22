@@ -19,7 +19,7 @@ ingress:
     # kubernetes.io/ingress.class: nginx
     # kubernetes.io/tls-acme: "true"
   hosts:
-    - host: traefik.k8s.pghost.cn
+    - host: chart-example.local
       paths:
         - path: /
           pathType: ImplementationSpecific
