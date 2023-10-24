@@ -1,0 +1,5 @@
+# update certs
+
+Intended to use argo workflow and regularly update the certificate of k8s.
+
+Roughly, check the certificates within the scope every day to determine if they are about to expire, and if so, update the certificates.
