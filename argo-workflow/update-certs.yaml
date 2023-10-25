@@ -1,0 +1,50 @@
+metadata:
+  name: auto-certsqqwrf
+  generateName: auto-certs-
+spec:
+  templates:
+    - name: list-expire-secret
+      steps:
+        - - name: list-secret
+            template: list-secret
+            arguments: {}
+        - - name: check-expire
+            template: check-expire
+            arguments:
+              parameters:
+                - name: name
+                  value: '{{item.name}}'
+                - name: certificate
+                  value: '{{item.certificate}}'
+                - name: namespace
+                  value: '{{item.namespace}}'
+                - name: expire
+                  value: '{{workflow.parameters.expire}}'
+            withParam: '{{steps.list-secret.outputs.result}}'
+    - name: list-secret
+      script:
+        image: bitnami/kubectl:latest
+        command:
+          - bash
+        source: >
+          kubectl get secret -A --field-selector type=kubernetes.io/tls -o jsonpath='{range.items[*]}{"{\"certificate\":\""}{.data.tls\.crt}{"\",\"name\":\""}{.metadata.name}{"\",\"namespace\":\""}{.metadata.namespace}{"\"},"}{end}'| awk '{if (NR>1) {print s;} s=$0} END {sub(",$", "", s); print s}'| awk 'BEGIN {print "["} {print $0} END {print "]"}'
+    - name: check-expire
+      inputs:
+        parameters:
+          - name: name
+          - name: certificate
+          - name: namespace
+          - name: expire
+      outputs: {}
+      metadata: {}
+      script:
+        image: bitnami/kubectl:latest
+        command:
+          - bash
+        source: >
+          echo "{{inputs.parameters.certificate}}" | base64 --decode |  openssl x509 -noout -enddate | cut -d "=" -f 2- | xargs -I{} sh -c 'if [$(date -d "{}" +%s) -lt $(($(date +%s) + {{inputs.parameters.expire}})) ]; then echo "😁"; else echo "😟"; fi'
+  entrypoint: list-expire-secret
+  arguments:
+    parameters:
+      - name: expire
+        value: '604800'
