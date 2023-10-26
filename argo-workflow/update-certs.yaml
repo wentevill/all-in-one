@@ -2,7 +2,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
   generateName: auto-certs-
-  name: auto-certsq
+  name: auto-certs
 spec:
   arguments:
     parameters:
