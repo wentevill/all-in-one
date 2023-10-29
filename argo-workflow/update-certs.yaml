@@ -8,11 +8,13 @@ spec:
     parameters:
     - name: expire
       value: "604800"
-  entrypoint: list-expire-secret
+  entrypoint: update-expire-secret
   templates:
-  - inputs: {}
+  - inputs:
+      parameters:
+      - name: expire
     metadata: {}
-    name: list-expire-secret
+    name: update-expire-secret
     outputs: {}
     steps:
     - - arguments: {}
@@ -22,15 +24,21 @@ spec:
           parameters:
           - name: name
             value: '{{item.name}}'
-          - name: certificate
-            value: '{{item.certificate}}'
           - name: namespace
             value: '{{item.namespace}}'
+          - name: certificate
+            value: '{{item.certificate}}'
           - name: expire
-            value: '{{workflow.parameters.expire}}'
-        name: check-expire
-        template: check-expire
+            value: '{{inputs.parameters.expire}}'
+        name: check-and-update
+        template: check-and-update
         withParam: '{{steps.list-secret.outputs.result}}'
+    - - arguments:
+          parameters:
+          - name: result
+            value: '{{steps.check-and-update.outputs.parameters.result }}'
+        name: display
+        template: display
   - inputs: {}
     metadata: {}
     name: list-secret
@@ -45,9 +53,40 @@ spec:
         kubectl get secret -A --field-selector type=kubernetes.io/tls -o jsonpath='{range .items[*]}{"{\"certificate\":\""}{.data.tls\.crt}{"\",\"name\":\""}{.metadata.name}{"\",\"namespace\":\""}{.metadata.namespace}{"\"},"}{end}'| awk '{if (NR>1) {print s;} s=$0} END {sub(",$", "", s); print s}'|  awk 'BEGIN {print "["} {print $0} END {print "]"}'
   - inputs:
       parameters:
+      - name: namespace
       - name: name
       - name: certificate
-      - name: namespace
+      - name: expire
+    metadata: {}
+    name: check-and-update
+    outputs:
+      parameters:
+      - name: result
+        valueFrom:
+          parameter: '{{steps.update-cert.outputs.result}}'
+    steps:
+    - - arguments:
+          parameters:
+          - name: certificate
+            value: '{{inputs.parameters.certificate}}'
+          - name: expire
+            value: '{{inputs.parameters.expire}}'
+        name: check-expire
+        template: check-expire
+    - - arguments:
+          parameters:
+          - name: namespace
+            value: '{{inputs.parameters.namespace}}'
+          - name: name
+            value: '{{inputs.parameters.name}}'
+          - name: is-expire
+            value: '{{steps.check-expire.outputs.result}}'
+        name: update-cert
+        template: update-cert
+        when: '{{steps.check-expire.outputs.result}} == true'
+  - inputs:
+      parameters:
+      - name: certificate
       - name: expire
     metadata: {}
     name: check-expire
@@ -58,5 +97,38 @@ spec:
       image: bitnami/kubectl:latest
       name: ""
       resources: {}
-      source: |
-        echo "{{inputs.parameters.certificate}}" | base64 --decode |  openssl x509 -noout -enddate | cut -d "=" -f 2- | xargs -I{} sh -c 'if [ $(date -d "{}" +%s) -lt $(($(date +%s) + {{inputs.parameters.expire}})) ]; then echo "😁"; else echo "😟"; fi'
+      source: echo "{{inputs.parameters.certificate}}" | base64 --decode |  openssl
+        x509 -noout -enddate | cut -d "=" -f 2- | xargs -I{} sh -c 'if [ $(date -d
+        "{}" +%s) -lt $(($(date +%s) + {{inputs.parameters.expire}})) ]; then echo
+        "true";else echo "false"; fi'
+  - inputs:
+      parameters:
+      - name: namespace
+      - name: name
+      - name: is-expire
+    metadata: {}
+    name: update-cert
+    outputs: {}
+    script:
+      command:
+      - bash
+      image: bitnami/kubectl:latest
+      name: ""
+      resources: {}
+      # TODO: use acme.sh update certificate.
+      source: 'echo ''[{"namespace": "{{inputs.parameters.namespace}}", "name": "{{inputs.parameters.name}}",
+        "expire":"xx"}]'''
+  - inputs:
+      parameters:
+      - name: result
+    metadata: {}
+    name: display
+    outputs: {}
+    script:
+      command:
+      - bash
+      image: bitnami/kubectl:latest
+      name: ""
+      resources: {}
+      # TODO: show something
+      source: echo "{{ inputs.parameters.result }}"
