@@ -1,18 +1,34 @@
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
+  creationTimestamp: "2023-10-24T12:01:11Z"
   generateName: auto-certs-
-  name: auto-certs
+  generation: 56
+  labels:
+    workflows.argoproj.io/creator: system-serviceaccount-argocd-argo-workflows-server
+  name: auto-certsqqwrf
+  namespace: workflows
+  resourceVersion: "872497"
+  uid: d9748331-6a13-4ffa-835b-5f5b8134de39
 spec:
   arguments:
     parameters:
     - name: expire
       value: "604800"
+    - name: acme-environment
+      value: ""
+    - name: acme-configmap
+      value: acme
+    - name: acme-key
+      value: acme.sh
   entrypoint: update-expire-secret
   templates:
   - inputs:
       parameters:
       - name: expire
+      - name: acme-environment
+      - name: acme-configmap
+      - name: acme-key
     metadata: {}
     name: update-expire-secret
     outputs: {}
@@ -28,6 +44,12 @@ spec:
             value: '{{item.namespace}}'
           - name: certificate
             value: '{{item.certificate}}'
+          - name: acme-environment
+            value: '{{inputs.parameters.acme-environment}}'
+          - name: acme-configmap
+            value: '{{inputs.parameters.acme-configmap}}'
+          - name: acme-key
+            value: '{{inputs.parameters.acme-key}}'
           - name: expire
             value: '{{inputs.parameters.expire}}'
         name: check-and-update
@@ -56,6 +78,9 @@ spec:
       - name: namespace
       - name: name
       - name: certificate
+      - name: acme-environment
+      - name: acme-configmap
+      - name: acme-key
       - name: expire
     metadata: {}
     name: check-and-update
@@ -75,12 +100,15 @@ spec:
         template: check-expire
     - - arguments:
           parameters:
-          - name: namespace
-            value: '{{inputs.parameters.namespace}}'
-          - name: name
-            value: '{{inputs.parameters.name}}'
-          - name: is-expire
-            value: '{{steps.check-expire.outputs.result}}'
+          - name: certificate
+            value: '{{inputs.parameters.certificate}}'
+          - name: environment
+            value: '{{inputs.parameters.acme-environment}}'
+          - name: acme
+            valueFrom:
+              configMapKeyRef:
+                key: '{{inputs.parameters.acme-key}}'
+                name: '{{inputs.parameters.acme-configmap}}'
         name: update-cert
         template: update-cert
         when: '{{steps.check-expire.outputs.result}} == true'
@@ -97,15 +125,15 @@ spec:
       image: bitnami/kubectl:latest
       name: ""
       resources: {}
-      source: echo "{{inputs.parameters.certificate}}" | base64 --decode |  openssl
-        x509 -noout -enddate | cut -d "=" -f 2- | xargs -I{} sh -c 'if [ $(date -d
-        "{}" +%s) -lt $(($(date +%s) + {{inputs.parameters.expire}})) ]; then echo
-        "true";else echo "false"; fi'
+      source: echo "{{inputs.parameters.certificate}}"|base64 --decode | openssl x509
+        -noout -enddate |  cut -d "=" -f 2- | xargs -I{} sh -c 'if [ $(date -d "{}"
+        +%s) -lt $(($(date +%s) + {{inputs.parameters.expire}})) ]; then echo "true";else
+        echo "false";fi'
   - inputs:
       parameters:
-      - name: namespace
-      - name: name
-      - name: is-expire
+      - name: environment
+      - name: certificate
+      - name: acme
     metadata: {}
     name: update-cert
     outputs: {}
@@ -116,8 +144,9 @@ spec:
       name: ""
       resources: {}
       # TODO: use acme.sh update certificate.
-      source: 'echo ''[{"namespace": "{{inputs.parameters.namespace}}", "name": "{{inputs.parameters.name}}",
-        "expire":"xx"}]'''
+      source: echo "{{inputs.parameters.certificate}}"| base64 --decode | openssl
+        x509 -text -noout | grep "Subject:" | awk -F 'CN =' '{print $2}' | xargs -I{}
+        sh -c 'echo [{\"domain\":\"{}\"}]'
   - inputs:
       parameters:
       - name: result
@@ -130,5 +159,5 @@ spec:
       image: bitnami/kubectl:latest
       name: ""
       resources: {}
-      # TODO: show something
+      # TODO: use email to notify result
       source: echo "{{ inputs.parameters.result }}"
